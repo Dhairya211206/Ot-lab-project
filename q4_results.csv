@@ -1,0 +1,19 @@
+Domain,Result,Value
+ML,Test accuracy (Logistic Regression),0.789
+ML,Test precision,0.681
+ML,Test recall,0.582
+ML,Baseline accuracy (majority class),0.694
+ML,High-risk buses (p >= 0.5),"B0, B3, B4, B9"
+QUBO,Brute-force optimum bit-string,1001100001
+QUBO,Brute-force minimum energy,-2.7479
+Quantum,QAOA (p=2) best bit-string,1001100001
+Quantum,QAOA best energy,-2.7479
+Quantum,Frequency of best answer,9/4096 = 0.22%
+Quantum,Matches brute force?,YES
+Parallel,Time 1 / 2 / 4 workers (s),0.536 / 0.316 / 0.308
+Parallel,Speed-up 2 / 4 workers,1.7 / 1.74
+Parallel,Efficiency 2 / 4 workers,0.85 / 0.44
+Decision,Buses chosen for maintenance,"B0, B3, B4, B9"
+Baseline,Expected breakdowns prevented: proposed,2.748
+Baseline,Expected breakdowns prevented: highest mileage,2.045
+Baseline,Expected breakdowns prevented: random,1.286

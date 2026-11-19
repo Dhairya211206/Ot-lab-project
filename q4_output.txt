@@ -1,0 +1,111 @@
+======================================================================
+PROBLEM FORMULATION
+======================================================================
+10 buses, only 4 maintenance slots today. Choose exactly 4 buses.
+Objective: maximise expected breakdowns prevented = sum of predicted p_i of chosen buses
+Constraint: exactly 4 buses chosen (sum x_i = 4), x_i in {0,1}
+Pipeline : ML (predict p_i) -> QUBO -> QAOA (choose 4) -> parallel energy evaluation
+Baseline : greedy top-4, highest-mileage rule (no ML), random choice
+
+======================================================================
+(a) MACHINE LEARNING - Logistic Regression
+======================================================================
+Synthetic data: 600 rows, features = ['mileage_km', 'engine_hours', 'service_gap_days', 'brake_wear_pct']
+Breakdown rate in data = 0.30
+Train/Test split = 420/180 (70/30)
+Accuracy  = 0.789
+Precision = 0.681
+Recall    = 0.582
+Confusion matrix [[TN FP] [FN TP]]:
+ [[110  15]
+ [ 23  32]]
+Baseline (always predict 0) accuracy = 0.694
+
+Prediction for each of the 10 buses:
+bus  mileage_km  engine_hours  service_gap_days  brake_wear_pct  p_breakdown prediction
+ B0    225291.0        6151.0              71.0            89.0        0.520  BREAKDOWN
+ B1    104610.0       14882.0              14.0            64.0        0.108         ok
+ B2    103482.0        3710.0             119.0            67.0        0.119         ok
+ B3    142923.0       12593.0             176.0            82.0        0.827  BREAKDOWN
+ B4    219401.0       10050.0              89.0            88.0        0.713  BREAKDOWN
+ B5    138674.0       13784.0              15.0            27.0        0.047         ok
+ B6     79849.0        6229.0             166.0            92.0        0.427         ok
+ B7    116613.0        9591.0              52.0            19.0        0.025         ok
+ B8    170850.0        1747.0              39.0            91.0        0.125         ok
+ B9    266904.0        2518.0             105.0            92.0        0.688  BREAKDOWN
+
+======================================================================
+(b) QUBO formulation
+======================================================================
+x_i = 1 if bus i gets a maintenance slot, else 0
+Minimize  E(x) = - sum_i p_i x_i  +  P (sum_i x_i - 4)^2,   P = 2.0
+  first term : reward for servicing buses likely to break down
+  second term: penalty if the number of chosen buses is not exactly 4
+
+Q matrix (upper triangular), constant = 32.0:
+       B0      B1      B2      B3      B4      B5      B6      B7      B8      B9
+B0 -14.52   4.000   4.000   4.000   4.000   4.000   4.000   4.000   4.000   4.000
+B1   0.00 -14.108   4.000   4.000   4.000   4.000   4.000   4.000   4.000   4.000
+B2   0.00   0.000 -14.119   4.000   4.000   4.000   4.000   4.000   4.000   4.000
+B3   0.00   0.000   0.000 -14.827   4.000   4.000   4.000   4.000   4.000   4.000
+B4   0.00   0.000   0.000   0.000 -14.713   4.000   4.000   4.000   4.000   4.000
+B5   0.00   0.000   0.000   0.000   0.000 -14.047   4.000   4.000   4.000   4.000
+B6   0.00   0.000   0.000   0.000   0.000   0.000 -14.427   4.000   4.000   4.000
+B7   0.00   0.000   0.000   0.000   0.000   0.000   0.000 -14.025   4.000   4.000
+B8   0.00   0.000   0.000   0.000   0.000   0.000   0.000   0.000 -14.125   4.000
+B9   0.00   0.000   0.000   0.000   0.000   0.000   0.000   0.000   0.000 -14.688
+
+Brute force best bit-string = 1001100001  energy = -2.7479
+Chosen buses = ['B0', 'B3', 'B4', 'B9']  (count = 4)
+Check: greedy top-4 by probability = ['B0', 'B3', 'B4', 'B9']  ->  MATCHES
+
+======================================================================
+(c) QUANTUM - QAOA (p = 2) on a simulator
+======================================================================
+Simulator: qiskit-aer AerSimulator,  qubits = 10,  shots = 4096
+Optimised angles  gamma = [2.256 1.033], beta = [1.146 1.638]
+
+Top 5 sampled bit-strings (lowest energy first):
+   bitstring    energy  count    freq  #chosen
+  1001100001   -2.7479      9   0.22%        4
+  0001101001   -2.6545     14   0.34%        4
+  1001101000   -2.4868      8   0.20%        4
+  1001001001   -2.4610      2   0.05%        4
+  0001100011   -2.3525      9   0.22%        4
+
+QAOA best answer   = 1001100001  energy = -2.7479  appears 9/4096 = 0.22%
+Most frequent      = 0001101001  (0.34%)
+Brute force optimum= 1001100001  energy = -2.7479
+QAOA found the optimum: YES
+Fraction of shots choosing exactly 4 buses = 30.15%
+Random guessing would hit the optimum with prob 1/1024 = 0.10%
+
+======================================================================
+(d) PARALLEL COMPUTING - ProcessPoolExecutor
+======================================================================
+Evaluating all 2^10 = 1024 bit-strings x 300 repeats, split into equal chunks
+ workers  time_s  speed_up  efficiency best_bitstring  best_energy
+       1   0.490      1.00        1.00     1001100001      -2.7479
+       2   0.276      1.78        0.89     1001100001      -2.7479
+       4   0.313      1.57        0.39     1001100001      -2.7479
+speed-up = T1 / Tp,  efficiency = speed-up / p
+
+======================================================================
+BASELINE COMPARISON (expected breakdowns prevented = sum of p_i of chosen buses)
+======================================================================
+QAOA (ML + quantum)              buses = ['B0', 'B3', 'B4', 'B9']  expected prevented = 2.748
+Greedy top-4 by p (classical)    buses = ['B0', 'B3', 'B4', 'B9']  expected prevented = 2.748
+Highest mileage (no ML)          buses = ['B0', 'B4', 'B8', 'B9']  expected prevented = 2.045
+Random 4 buses                   buses = ['B5', 'B6', 'B8', 'B9']  expected prevented = 1.286
+
+Saved charts: plot1_ml_predictions.png, plot2_qaoa_results.png, plot3_speedup.png, plot4_baselines.png
+
+======================================================================
+(e) CONCLUSION
+======================================================================
+1. Logistic Regression ranked breakdown risk; QAOA picked ['B0', 'B3', 'B4', 'B9'] for the 4 slots, matching brute force.
+2. The QUBO penalty enforced 'exactly 4'; the ML-driven choice prevents more expected breakdowns than mileage-only or random baselines.
+3. Parallel evaluation of all 2^10 energies gave speed-up < p because of process start-up overhead; QAOA is a demo at 10 qubits, classical brute force is still faster here.
+
+Limitations: synthetic data; QAOA p=2 gives a low probability for the optimum; small n hides parallel gains.
+References: scikit-learn LogisticRegression docs; Farhi et al. 2014 (QAOA); Qiskit Aer docs; Python concurrent.futures docs.
